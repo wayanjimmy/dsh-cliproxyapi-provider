@@ -11,7 +11,7 @@
 安装插件：
 
 ```powershell
-npx @deepseek-ai/dsh plugin --profile web add github:router-for-me/dsh-cliproxyapi-provider
+npx @deepseek-ai/dsh plugin --profile web add github:wayanjimmy/dsh-cliproxyapi-provider
 ```
 
 启动或重启 DeepSeek Harness Web：

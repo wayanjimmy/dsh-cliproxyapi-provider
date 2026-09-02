@@ -18,7 +18,15 @@ test('client bundle registers a lifecycle-owned Plugins Settings tab', async () 
       assert.equal(id, 'react')
       return {}
     })
-    assert.deepEqual(plugin.inject, ['connection', 'remote', 'slots', 'locale', 'settingsScope'])
+    assert.deepEqual(plugin.inject, [
+      'remote',
+      'remote.settings',
+      'remote.credentials',
+      'remote.llm',
+      'slots',
+      'locale',
+      'settingsScope',
+    ])
 
     const registrations = []
     const injections = []
@@ -60,8 +68,14 @@ test('client bundle registers a lifecycle-owned Plugins Settings tab', async () 
     let effect
     const ctx = {
       get(name) {
-        if (name === 'connection') return { api: {} }
-        if (name === 'remote') return { $on() { return () => {} } }
+        if (name === 'remote') {
+          return {
+            settings: {},
+            credentials: {},
+            llm: {},
+            $on() { return () => {} },
+          }
+        }
         if (name === 'slots') return slots
         if (name === 'locale') return locale
         if (name === 'settingsScope') return settingsScope
@@ -99,7 +113,7 @@ test('client owns only its Settings slot and keeps the configuration accessible'
   assert.match(source, /settings\.plugins\.tab/)
   assert.match(source, /ctx\.settingsScope/)
   assert.match(source, /slots\.inject\(SETTINGS_SLOT/)
-  assert.match(source, /expectedRevision/)
+  assert.match(source, /Number\.isInteger\(namespace\.revision\)/)
   assert.match(source, /scope\.subscribe\(/)
   assert.doesNotMatch(source, /remote\.\$on\('settings\/document-updated'/)
   assert.match(source, /remote\.\$on\('credentials\/reference-updated'/)
@@ -137,14 +151,17 @@ test('initial profile waits until the host writes complete model capabilities', 
     }
     let bootstrap
     let discoveryRequest
-    const ok = (value) => ({ result: { ok: true, value } })
-    const api = {
+    const ok = (value) => ({ ok: true, value })
+    const remote = {
       settings: {
-        async describe() {
+        async describe(...args) {
+          assert.deepEqual(args, [])
           return ok({ writable: true, hasDocument: true, namespaces: [currentNamespace] })
         },
-        async mutate(request) {
-          bootstrap = request.ops[0].value
+        async mutate(namespace, ops, expectedRevision) {
+          assert.equal(namespace, 'llm-pi-ai')
+          assert.equal(expectedRevision, 1)
+          bootstrap = ops[0].value
           currentNamespace = {
             ns: 'llm-pi-ai', revision: 2, value: { providers: { CLIProxyAPI: bootstrap } },
           }
@@ -152,16 +169,18 @@ test('initial profile waits until the host writes complete model capabilities', 
         },
       },
       credentials: {
-        async describe() {
-          return ok({ credentials: { DSH_CLIPROXY_API_KEY: { configured: false } } })
+        async describe(refs) {
+          assert.deepEqual(refs, ['DSH_CLIPROXY_API_KEY'])
+          return ok({ DSH_CLIPROXY_API_KEY: { configured: false } })
         },
       },
       llm: {
-        async discoverModels(request) {
+        async discoverModels(namespace, request) {
+          assert.equal(namespace, 'llm-cliproxyapi')
           discoveryRequest = request
-          return ok({ models: [{
+          return ok([{
             id: 'gpt-5.6-sol', name: 'GPT 5.6 Sol', contextWindow: 372000, maxTokens: 32768,
-          }] })
+          }])
         },
       },
     }
@@ -180,7 +199,7 @@ test('initial profile waits until the host writes complete model capabilities', 
     }
     let settled = false
     const installing = plugin.installInitialProfile(
-      api, scope, 'http://127.0.0.1:8317/v1', '', messages,
+      remote, scope, 'http://127.0.0.1:8317/v1', '', messages,
     ).then((profile) => {
       settled = true
       return profile
@@ -190,7 +209,7 @@ test('initial profile waits until the host writes complete model capabilities', 
       await new Promise((resolve) => setTimeout(resolve, 0))
     }
     assert.ok(bootstrap)
-    assert.equal(discoveryRequest.settingsNs, 'llm-cliproxyapi')
+    assert.equal(discoveryRequest.provider, 'CLIProxyAPI')
     assert.equal(bootstrap.models[0].input, undefined)
     assert.equal(bootstrap.models[0].reasoningEfforts, undefined)
     assert.match(bootstrap.headers['x-dsh-provider-cpa-sync'], /^rich:/)
