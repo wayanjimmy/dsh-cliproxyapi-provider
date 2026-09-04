@@ -77,11 +77,30 @@ test('uses configured fallbacks when catalog capability fields are absent', () =
     defaultInput: ['text'],
   }), {
     id: 'fallback-model',
-    name: 'fallback-model',
+    name: 'Fallback Model',
     contextWindow: 262144,
     maxTokens: 32768,
     input: ['text'],
   })
+})
+
+test('synthesizes a display name when the catalog supplies none', () => {
+  const ids = [
+    'gemini-2.5-flash', 'glm-5.3', 'glm-5.3-flash', 'hy-deepseek-v4-flash',
+    'nw-glm-5.2-short-fast', 'th-qwen3.8-max', 'th-kimi-k3', 'nw-gemma-4-31b',
+  ]
+  assert.deepEqual(ids.map((id) => modelProfileOf({ slug: id }).name), [
+    'Gemini 2.5 Flash', 'GLM 5.3', 'GLM 5.3 Flash', 'HY DeepSeek v4 Flash',
+    'NW GLM 5.2 Short Fast', 'TH Qwen3.8 Max', 'TH Kimi K3', 'NW Gemma 4 31b',
+  ])
+})
+
+test('prettifies a catalog name that only repeats the id', () => {
+  assert.equal(modelProfileOf({ slug: 'glm-5.3', name: 'glm-5.3' }).name, 'GLM 5.3')
+})
+
+test('keeps a catalog display_name that is not the id', () => {
+  assert.equal(modelProfileOf({ slug: 'gpt-5.6-sol', display_name: 'GPT 5.6 Sol' }).name, 'GPT 5.6 Sol')
 })
 
 test('filters hidden models by default and deduplicates slugs', () => {

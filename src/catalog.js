@@ -36,6 +36,33 @@ export function reasoningEffortsOf(entry) {
   return Object.keys(efforts).length ? efforts : undefined
 }
 
+// Display spellings for tokens a naive capitalize gets wrong; extend this map
+// when a new brand acronym joins the catalog. Unlisted tokens of at most two
+// letters uppercase as route acronyms (th, nw, hy), version-like tokens
+// (5.3, v4, 2.5) keep their spelling, and everything else capitalizes.
+const TOKEN_NAMES = {
+  gpt: 'GPT',
+  glm: 'GLM',
+  llm: 'LLM',
+  deepseek: 'DeepSeek',
+}
+
+function displayNameOf(id) {
+  return id.split(/[-_\s]+/).filter(Boolean).map((token) => {
+    const mapped = TOKEN_NAMES[token.toLowerCase()]
+    if (mapped) return mapped
+    if (/^v?\d/.test(token)) return token
+    if (token.length <= 2) return token.toUpperCase()
+    return token[0].toUpperCase() + token.slice(1).toLowerCase()
+  }).join(' ')
+}
+
+// A catalog-supplied name that only repeats the id in another separator
+// style describes nothing; treat it as absent so the prettifier runs.
+function isIdShaped(name, id) {
+  return name.replace(/[-_\s]+/g, '-').toLowerCase() === id.toLowerCase()
+}
+
 function inputModalitiesOf(entry, fallback) {
   if (!Array.isArray(entry?.input_modalities)) return [...fallback]
   const modalities = []
@@ -54,9 +81,10 @@ export function modelProfileOf(entry, options = {}) {
   const id = nonEmptyString(entry?.slug, entry?.id, entry?.model)
   if (!id || (!options.includeHiddenModels && entry?.visibility === 'hide')) return undefined
   const reasoningEfforts = reasoningEffortsOf(entry)
+  const supplied = nonEmptyString(entry?.display_name, entry?.name, entry?.description)
   return {
     id,
-    name: nonEmptyString(entry?.display_name, entry?.name, entry?.description, id),
+    name: supplied && !isIdShaped(supplied, id) ? supplied : displayNameOf(id),
     contextWindow: positiveInteger(entry?.max_context_window, entry?.context_window, options.defaultContextWindow),
     maxTokens: positiveInteger(entry?.max_output_tokens, entry?.max_completion_tokens, entry?.max_tokens, options.defaultMaxTokens),
     input: inputModalitiesOf(entry, options.defaultInput ?? ['text']),
