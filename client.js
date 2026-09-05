@@ -320,17 +320,6 @@ window.__ModuleLoader__.load({
       }
     }
 
-    async function credentialStatusOf(remote) {
-      try {
-        const described = unwrap(await remote.credentials.describe([CREDENTIAL_REF]))
-        return described[CREDENTIAL_REF]?.configured === true
-          ? 'configured'
-          : 'missing'
-      } catch {
-        return 'unknown'
-      }
-    }
-
     function SettingsTab({ remote, scope, t }) {
       const snapshot = useSyncExternalStore(
         (listener) => scope.subscribe(listener),
@@ -341,10 +330,10 @@ window.__ModuleLoader__.load({
       const [baseURL, setBaseURL] = useState(DEFAULT_BASE_URL)
       const [apiKey, setApiKey] = useState('')
       const [loadedRevision, setLoadedRevision] = useState(undefined)
-      const [credentialStatus, setCredentialStatus] = useState('unknown')
       const [saving, setSaving] = useState(false)
       const [feedback, setFeedback] = useState({ text: '', error: false })
       const messages = useMemo(() => messagesOf(t), [t])
+      const credentialConfigured = profile?.apiKeyEnv === CREDENTIAL_REF
       const readOnly = snapshot.status === 'ready' && !snapshot.writable
       const canSave = snapshot.status === 'ready' && snapshot.writable && !saving
 
@@ -357,22 +346,6 @@ window.__ModuleLoader__.load({
         setApiKey('')
         setLoadedRevision(snapshot.revision)
       }, [loadedRevision, profile?.baseURL, snapshot.revision, snapshot.status])
-
-      useEffect(() => {
-        let active = true
-        const refresh = async () => {
-          const status = await credentialStatusOf(remote)
-          if (active) setCredentialStatus(status)
-        }
-        void refresh()
-        const dispose = remote.$on('credentials/reference-updated', (ref) => {
-          if (ref === CREDENTIAL_REF) void refresh()
-        })
-        return () => {
-          active = false
-          dispose()
-        }
-      }, [remote])
 
       const submit = async (event) => {
         event.preventDefault()
@@ -440,7 +413,7 @@ window.__ModuleLoader__.load({
               'span',
               { style: styles.labelRow },
               React.createElement('span', { style: styles.label }, t('apiKey')),
-              credentialStatus === 'configured'
+              credentialConfigured
                 ? React.createElement(
                   'span',
                   { style: styles.credentialStatus, role: 'status' },
@@ -452,7 +425,7 @@ window.__ModuleLoader__.load({
               style: styles.input,
               type: 'password',
               value: apiKey,
-              placeholder: credentialStatus === 'configured'
+              placeholder: credentialConfigured
                 ? t('apiKeyConfiguredPlaceholder')
                 : t('apiKeyPlaceholder'),
               autoComplete: 'off',

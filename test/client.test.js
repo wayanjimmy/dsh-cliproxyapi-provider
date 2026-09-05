@@ -116,7 +116,8 @@ test('client owns only its Settings slot and keeps the configuration accessible'
   assert.match(source, /Number\.isInteger\(namespace\.revision\)/)
   assert.match(source, /scope\.subscribe\(/)
   assert.doesNotMatch(source, /remote\.\$on\('settings\/document-updated'/)
-  assert.match(source, /remote\.\$on\('credentials\/reference-updated'/)
+  assert.doesNotMatch(source, /remote\.\$on\('credentials\/reference-updated'/)
+  assert.match(source, /profile\?\.apiKeyEnv === CREDENTIAL_REF/)
   assert.match(source, /role: 'status'/)
 })
 
