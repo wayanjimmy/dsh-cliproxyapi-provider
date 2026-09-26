@@ -31,7 +31,7 @@ window.__ModuleLoader__.load({
       'remote.llm',
       'slots',
       'locale',
-      'settingsScope',
+      'configForms',
     ]
 
     const copy = {
@@ -275,7 +275,8 @@ window.__ModuleLoader__.load({
 
     async function installInitialProfile(remote, scope, baseURL, apiKey, messages) {
       const described = unwrap(await remote.settings.describe())
-      const namespace = described.namespaces.find((entry) => entry.ns === PI_NS)
+      const namespaces = Array.isArray(described) ? described : (described?.namespaces || [])
+      const namespace = namespaces.find((entry) => entry.ns === PI_NS)
       if (!namespace) throw new Error('The llm-pi-ai settings namespace is unavailable')
 
       const credentials = unwrap(await remote.credentials.describe([CREDENTIAL_REF]))
@@ -460,9 +461,10 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       const remote = ctx.get('remote')
       const locale = ctx.locale
-      const settingsScope = ctx.settingsScope
       const t = locale.bind(SETTINGS_LOCALE_NS)
-      const scope = settingsScope.bind({ namespace: PI_NS })
+      const scope = ctx.configForms
+        ? ctx.configForms.get(PI_NS)
+        : ctx.settingsScope?.bind({ namespace: PI_NS })
 
       ctx.effect(
         () => locale.register(SETTINGS_LOCALE_NS, copy),

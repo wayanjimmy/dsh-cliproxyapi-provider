@@ -25,7 +25,7 @@ test('client bundle registers a lifecycle-owned Plugins Settings tab', async () 
       'remote.llm',
       'slots',
       'locale',
-      'settingsScope',
+      'configForms',
     ])
 
     const registrations = []
@@ -59,9 +59,9 @@ test('client bundle registers a lifecycle-owned Plugins Settings tab', async () 
         return () => {}
       },
     }
-    const settingsScope = {
-      bind(spec) {
-        assert.deepEqual(spec, { namespace: 'llm-pi-ai' })
+    const configForms = {
+      get(namespace) {
+        assert.equal(namespace, 'llm-pi-ai')
         return scope
       },
     }
@@ -78,12 +78,12 @@ test('client bundle registers a lifecycle-owned Plugins Settings tab', async () 
         }
         if (name === 'slots') return slots
         if (name === 'locale') return locale
-        if (name === 'settingsScope') return settingsScope
+        if (name === 'configForms') return configForms
         throw new Error(`unexpected service: ${name}`)
       },
       slots,
       locale,
-      settingsScope,
+      configForms,
       effect(factory) {
         effect = factory
         return () => {}
@@ -111,7 +111,7 @@ test('client owns only its Settings slot and keeps the configuration accessible'
   assert.doesNotMatch(source, /querySelector(All)?\s*\(/)
   assert.doesNotMatch(source, /modelsHeading|configuredRows|BOOTSTRAP_ATTRIBUTE|HIDDEN_ATTRIBUTE/)
   assert.match(source, /settings\.plugins\.tab/)
-  assert.match(source, /ctx\.settingsScope/)
+  assert.match(source, /ctx\.configForms/)
   assert.match(source, /slots\.inject\(SETTINGS_SLOT/)
   assert.match(source, /Number\.isInteger\(namespace\.revision\)/)
   assert.match(source, /scope\.subscribe\(/)
