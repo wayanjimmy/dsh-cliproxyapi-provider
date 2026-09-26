@@ -242,6 +242,15 @@ function retryDelay(config, failures) {
   return Math.min(config.retryInitialMs * (2 ** Math.max(0, failures - 1)), config.retryMaxMs)
 }
 
+function getSettingsSection(ctx, ns) {
+  if (typeof ctx.settings?.get === 'function') return ctx.settings.get(ns)
+  if (typeof ctx.settings?.describe === 'function') {
+    const desc = ctx.settings.describe().find((d) => d.ns === ns)
+    if (desc) return desc.value
+  }
+  return undefined
+}
+
 export function apply(ctx, config) {
   if (!config.defaultInput.length) throw new Error('defaultInput must contain at least one modality')
   if (config.retryMaxMs < config.retryInitialMs) throw new Error('retryMaxMs must be greater than or equal to retryInitialMs')
@@ -295,7 +304,7 @@ export function apply(ctx, config) {
   let observedRefreshKey
 
   const synchronize = async (signal, authOnly = false) => {
-    const section = ctx.settings.get(PI_NS)
+    const section = getSettingsSection(ctx, PI_NS)
     if (section === undefined) throw new Error('The built-in llm-pi-ai settings namespace is not ready')
     const profile = section.providers?.[PROVIDER]
     if (!profile) return false
@@ -396,7 +405,7 @@ export function apply(ctx, config) {
   }
 
   const scheduleFromSettings = (force = false) => {
-    const profile = ctx.settings.get(PI_NS)?.providers?.[PROVIDER]
+    const profile = getSettingsSection(ctx, PI_NS)?.providers?.[PROVIDER]
     const refreshKey = refreshKeyOf(profile, config)
     if (!force && refreshKey === observedRefreshKey) return
     observedRefreshKey = refreshKey
@@ -404,6 +413,9 @@ export function apply(ctx, config) {
   }
 
   ctx.on('settings/updated', (ns) => {
+    if (ns === PI_NS) scheduleFromSettings()
+  })
+  ctx.on('settings/document-updated', (ns) => {
     if (ns === PI_NS) scheduleFromSettings()
   })
   ctx.on('credentials/reference-updated', (ref) => {
