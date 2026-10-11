@@ -9,7 +9,6 @@ import {
   inject as piAiInject,
   name as piAiName,
 } from '@deepseek-ai/dsh-llm-pi-ai'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import {
   Config,
   PLACEHOLDER_AUTHORIZATION,
@@ -337,7 +336,7 @@ test('refreshIntervalMs zero disables healthy periodic refreshes', async () => {
   }
 })
 
-test('credential removal regenerates the profile in keyless mode', async () => {
+test('credential removal keeps the explicit profile apiKeyEnv', async () => {
   const previousFetch = globalThis.fetch
   globalThis.fetch = async () => new Response(JSON.stringify({ models: [{ slug: 'model-a' }] }), { status: 200 })
   try {
@@ -357,10 +356,10 @@ test('credential removal regenerates the profile in keyless mode', async () => {
     harness.mutations.length = 0
     harness.setCredential(undefined)
     harness.emit('credentials/reference-updated', 'DSH_CLIPROXY_API_KEY')
-    await waitFor(() => harness.mutations.length === 1)
-    const profile = harness.mutations[0][0].value
-    assert.equal(profile.apiKeyEnv, undefined)
-    assert.equal(profile.headers.authorization, PLACEHOLDER_AUTHORIZATION)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.equal(harness.mutations.length, 0)
+    assert.equal(harness.section.providers.CLIProxyAPI.apiKeyEnv, 'DSH_CLIPROXY_API_KEY')
+    assert.deepEqual(harness.section.providers.CLIProxyAPI.models.map((model) => model.id), ['model-a'])
     harness.dispose()
   } finally {
     globalThis.fetch = previousFetch
@@ -433,10 +432,22 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     },
   }
 
-  class MemorySettings extends SettingsProvider {
-    writable = true
-    async load() { return structuredClone(document) }
-    async persist(ns, section) { document[ns] = structuredClone(section) }
+  class MemorySettings extends Service {
+    constructor(ctx) {
+      super(ctx, 'settings')
+    }
+    get(ns) { return structuredClone(document[ns]) }
+    async mutate(ns, ops) {
+      for (const op of ops) {
+        if (op.op !== 'set') throw new Error('MemorySettings only supports set ops')
+        let cursor = document[ns]
+        for (const key of op.path.slice(0, -1)) cursor = cursor[key] ??= {}
+        cursor[op.path.at(-1)] = structuredClone(op.value)
+      }
+      for (const listener of this.ctx.events.dispatch('emit', ['settings/updated', ns])) {
+        Promise.resolve(listener(ns)).catch(() => {})
+      }
+    }
   }
 
   class MemoryCredentials extends CredentialProvider {
@@ -487,12 +498,13 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     fibers.push(ctx.plugin(TimerService))
     await Promise.all(fibers.map((fiber) => fiber.await()))
 
-    const piFiber = ctx.plugin({
+    const plugPiAi = (providers) => ctx.plugin({
       name: piAiName,
       inject: piAiInject,
       Config: PiAiConfig,
       apply: applyPiAi,
-    }, { providers: {} })
+    }, { providers })
+    let piFiber = plugPiAi({})
     const cpaFiber = ctx.plugin({ name: 'llm-cliproxyapi', inject: ['settings', 'credentials', 'llm', 'timer'], Config, apply }, {
       retryInitialMs: 10,
       retryMaxMs: 20,
@@ -522,6 +534,14 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     await waitFor(() => ctx.settings.get('llm-pi-ai')?.providers?.CLIProxyAPI?.models?.[0]?.id === 'plain')
     await waitFor(() => ctx.settings.get('llm-pi-ai').providers.CLIProxyAPI.headers[PROFILE_SYNC_HEADER] === undefined)
     assert.equal(catalogFetches, 1)
+
+    // The host recomposes the llm-pi-ai entry after a settings write; a bare
+    // in-memory settings service cannot rewire a live fiber's config, so
+    // emulate the recomposition by re-plugging pi-ai with the written profile.
+    await piFiber.dispose()
+    piFiber = plugPiAi(ctx.settings.get('llm-pi-ai').providers)
+    fibers.push(piFiber)
+    await piFiber.await()
     const directories = ctx.llm.listConfigurableProviders().filter((entry) => entry.provider === 'CLIProxyAPI')
     assert.equal(directories.length, 1)
     assert.equal(directories[0].settingsNs, 'llm-pi-ai')
@@ -544,6 +564,6 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     assert.notEqual(chunks.at(-1)?.reason?.failure?.code, 'MISSING_CREDENTIAL')
   } finally {
     globalThis.fetch = previousFetch
-    for (const fiber of fibers.reverse()) await fiber.dispose().catch(() => {})
+    for (const fiber of fibers.reverse()) await Promise.resolve(fiber.dispose()).catch(() => {})
   }
 })
