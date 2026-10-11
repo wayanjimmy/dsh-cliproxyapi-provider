@@ -215,7 +215,7 @@ function refreshKeyOf(profile, config) {
 
 async function profileOf(profile, models, hasApiKey, config) {
   const {
-    apiKeyEnv: _previousApiKeyEnv,
+    apiKeyEnv,
     modelOverrides: _previousModelOverrides,
     ...rest
   } = profile
@@ -228,14 +228,16 @@ async function profileOf(profile, models, hasApiKey, config) {
     defaultContextWindow: config.defaultContextWindow,
     defaultMaxTokens: config.defaultMaxTokens,
     defaultInput: [...config.defaultInput],
-    headers: profileHeadersOf(profile.headers, config.headers, hasApiKey),
-    ...(hasApiKey ? { apiKeyEnv: API_KEY_REF } : {}),
+    headers: profileHeadersOf(profile.headers, config.headers, hasApiKey || !!apiKeyEnv),
+    ...((apiKeyEnv || hasApiKey) ? { apiKeyEnv: apiKeyEnv || API_KEY_REF } : {}),
   }
   const validated = await PiAiConfig['~standard'].validate({ providers: { [PROVIDER]: candidate } })
   if (validated.issues?.length) {
     throw new Error(`llm-pi-ai rejected the generated provider profile: ${validated.issues[0].message}`)
   }
-  return validated.value.providers[PROVIDER]
+  const normalized = validated.value.providers.get()[PROVIDER]
+  if (!normalized) throw new Error('llm-pi-ai validation returned no CLIProxyAPI profile')
+  return normalized
 }
 
 function retryDelay(config, failures) {
