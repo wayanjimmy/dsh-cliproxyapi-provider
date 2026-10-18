@@ -249,3 +249,98 @@ test('initial profile waits until the host writes complete model capabilities', 
     delete globalThis.window
   }
 })
+
+async function loadSettingsTab(query) {
+  let definition
+  globalThis.window = {
+    __ModuleLoader__: {
+      load(value) {
+        definition = value
+      },
+    },
+  }
+  try {
+    await import('../client.js' + query)
+    const state = []
+    const React = {
+      createElement(tag, props, ...children) {
+        return { tag, props, children }
+      },
+      useEffect() {},
+      useMemo(factory) {
+        return factory()
+      },
+      useState(initial) {
+        const index = state.length
+        state.push(typeof initial === 'function' ? initial() : initial)
+        return [state[index], () => {}]
+      },
+      useSyncExternalStore(subscribe, getSnapshot) {
+        subscribe(() => {})
+        return getSnapshot()
+      },
+    }
+    const plugin = definition.factory((id) => {
+      assert.equal(id, 'react')
+      return React
+    })
+    return plugin.settingsTab
+  } finally {
+    delete globalThis.window
+  }
+}
+
+function findSubmitButtons(node, out = []) {
+  if (!node || typeof node !== 'object') return out
+  if (node.tag === 'button' && node.props?.type === 'submit') out.push(node)
+  const children = Array.isArray(node.children) ? node.children : [node.children]
+  for (const child of children) {
+    if (Array.isArray(child)) for (const entry of child) findSubmitButtons(entry, out)
+    else findSubmitButtons(child, out)
+  }
+  return out
+}
+
+test('Save & Enable keys off writability and styles each state unambiguously', async () => {
+  const SettingsTab = await loadSettingsTab('?save-button-states-test')
+  const render = (snapshot) => findSubmitButtons(SettingsTab({
+    remote: {},
+    scope: {
+      getSnapshot: () => snapshot,
+      subscribe: () => () => {},
+    },
+    t: (key) => key,
+  }))
+
+  // Mirror still loading: nothing is writable yet, so the form stays disabled.
+  const loading = render({ status: 'loading', value: undefined, revision: undefined, writable: false })
+  assert.equal(loading.length, 1)
+  assert.equal(loading[0].props.disabled, true)
+  assert.equal(loading[0].props.style.opacity, 0.55)
+
+  // Ready and writable: enabled with the canonical active-button styling.
+  const ready = render({
+    status: 'ready',
+    revision: 4,
+    value: { providers: { CLIProxyAPI: { baseURL: 'http://127.0.0.1:8317/v1' } } },
+    writable: true,
+  })
+  assert.equal(ready.length, 1)
+  assert.equal(ready[0].props.disabled, false)
+  assert.equal(ready[0].props.style.opacity, undefined)
+  assert.match(ready[0].props.style.background, /--dsw-alias-button-primary-fill/)
+  assert.match(ready[0].props.style.color, /--dsw-alias-label-primary-foreground/)
+
+  // The namespace view is missing but the document accepts writes: enabled,
+  // because the write path describes the namespace itself and shows a precise
+  // error instead of a dead form when it is truly absent.
+  const unavailable = render({ status: 'unavailable', value: undefined, revision: undefined, writable: true })
+  assert.equal(unavailable.length, 1)
+  assert.equal(unavailable[0].props.disabled, false)
+
+  // Read-only document: disabled and visibly dimmed.
+  const readOnly = render({ status: 'ready', revision: 4, value: { providers: {} }, writable: false })
+  assert.equal(readOnly.length, 1)
+  assert.equal(readOnly[0].props.disabled, true)
+  assert.equal(readOnly[0].props.style.opacity, 0.55)
+})

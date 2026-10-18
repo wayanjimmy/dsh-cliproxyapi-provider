@@ -162,8 +162,10 @@ window.__ModuleLoader__.load({
         minHeight: '38px',
         border: '1px solid transparent',
         borderRadius: '10px',
-        background: 'var(--dsw-alias-brand-primary, #111827)',
-        color: '#fff',
+        // The canonical primary-action pair the built-in settings pages use;
+        // theme-aware and unmistakably active next to the dimmed disabled state.
+        background: 'var(--dsw-alias-button-primary-fill, #111827)',
+        color: 'var(--dsw-alias-label-primary-foreground, #fff)',
         padding: '8px 14px',
         font: 'inherit',
       },
@@ -336,7 +338,12 @@ window.__ModuleLoader__.load({
       const messages = useMemo(() => messagesOf(t), [t])
       const credentialConfigured = profile?.apiKeyEnv === CREDENTIAL_REF
       const readOnly = snapshot.status === 'ready' && !snapshot.writable
-      const canSave = snapshot.status === 'ready' && snapshot.writable && !saving
+      // Writability is the only real requirement for saving: installInitialProfile
+      // describes the namespace itself and surfaces precise errors, so an enabled
+      // button always beats a form that silently cannot save. While the scope is
+      // still loading it reports writable: false, so this stays disabled until the
+      // mirror knows the document accepts writes.
+      const canSave = snapshot.writable && !saving
 
       useEffect(() => {
         if (snapshot.status !== 'ready' || snapshot.revision === undefined) return
