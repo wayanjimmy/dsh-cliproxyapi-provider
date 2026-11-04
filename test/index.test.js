@@ -155,8 +155,7 @@ test('initial discovery requests the fixed rich catalog and returns full capabil
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
       apiKey: 'secret-key',
-      signal: new AbortController().signal,
-    })
+    }, new AbortController().signal)
     assert.equal(
       requestURL,
       'http://127.0.0.1:8317/v1/models?client_version=dsh-cliproxyapi-provider',
@@ -205,8 +204,7 @@ test('first profile synchronization restores capabilities stripped by the browse
     const discovered = await harness.discoveries.get('llm-cliproxyapi')({
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
-      signal: new AbortController().signal,
-    })
+    }, new AbortController().signal)
     const bootstrapModels = discovered.map(({ id, name, contextWindow, maxTokens }) => ({
       id, name, contextWindow, maxTokens,
     }))
@@ -219,7 +217,7 @@ test('first profile synchronization restores capabilities stripped by the browse
         },
       }),
     } })
-    harness.emit('settings/updated', 'llm-pi-ai', harness.section, undefined, 'update')
+    harness.emit('settings/document-updated', 'llm-pi-ai', 2)
 
     await waitFor(() => harness.mutations.length === 1)
     const profile = harness.mutations[0][0].value
@@ -305,6 +303,7 @@ test('keyless profiles omit apiKeyEnv and receive a non-sensitive placeholder he
     assert.equal(profile.apiKeyEnv, undefined)
     assert.equal(profile.headers.authorization, PLACEHOLDER_AUTHORIZATION)
     assert.equal(profile.models[0].id, 'model-a')
+    // Legacy 0.1.x event spelling: the plugin still listens for both.
     harness.emit('settings/updated', 'llm-pi-ai', harness.section, undefined, 'update')
     await new Promise((resolve) => setTimeout(resolve, 25))
     assert.equal(harness.mutations.length, 1)
@@ -388,7 +387,7 @@ test('a newer settings change aborts stale discovery and only installs the lates
     harness.setSection({ providers: {
       CLIProxyAPI: managedProfile({ baseURL: 'http://127.0.0.1:9417/v1' }),
     } })
-    harness.emit('settings/updated', 'llm-pi-ai', harness.section, undefined, 'update')
+    harness.emit('settings/document-updated', 'llm-pi-ai', 3)
     await waitFor(() => harness.mutations.length === 1)
     const profile = harness.mutations[0][0].value
     assert.equal(profile.baseURL, 'http://127.0.0.1:9417/v1')
@@ -515,8 +514,7 @@ test('real Cordis composition leaves llm-pi-ai as the sole directory owner', asy
     const discovered = await ctx.llm.discoverModels('llm-cliproxyapi', {
       provider: 'CLIProxyAPI',
       baseURL: 'http://127.0.0.1:8317/v1',
-      signal: new AbortController().signal,
-    })
+    }, new AbortController().signal)
     assert.equal(discovered[0].input, undefined)
     assert.equal(discovered[1].reasoningEfforts, undefined)
     await ctx.settings.mutate('llm-pi-ai', [{
